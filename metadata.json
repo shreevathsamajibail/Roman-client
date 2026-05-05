@@ -1,0 +1,6 @@
+{
+  "name": "Image Studio",
+  "description": "A high-performance AI image generation studio powered by Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
