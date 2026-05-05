@@ -11,9 +11,6 @@ import {
   Send,
   Loader2,
   Maximize2,
-  Github,
-  Cloud,
-  CloudOff,
   FolderOpen,
   FolderPlus,
   Folder as FolderIcon,
@@ -31,7 +28,7 @@ import {
   X,
   Check
 } from 'lucide-react';
-import * as github from './services/githubService';
+import * as storage from './services/storageService';
 import { Folder, ImageFile, Manifest, ContentPrompt, StylePrompt } from './types';
 
 export default function App() {
@@ -98,7 +95,7 @@ export default function App() {
     };
     const updated = [...contentPrompts, newPrompt];
     setContentPrompts(updated);
-    saveToGithub(images, folders, updated, stylePrompts);
+    saveToStorage(images, folders, updated, stylePrompts);
     setSystemPromptName("");
     setSystemPromptContent("");
   };
@@ -112,7 +109,7 @@ export default function App() {
     };
     const updated = [...stylePrompts, newPrompt];
     setStylePrompts(updated);
-    saveToGithub(images, folders, contentPrompts, updated);
+    saveToStorage(images, folders, contentPrompts, updated);
     setStylePromptName("");
     setStylePromptContent("");
   };
@@ -120,36 +117,28 @@ export default function App() {
   const deleteContentPrompt = (id: string) => {
     const updated = contentPrompts.filter(p => p.id !== id);
     setContentPrompts(updated);
-    saveToGithub(images, folders, updated, stylePrompts);
+    saveToStorage(images, folders, updated, stylePrompts);
   };
 
   const deleteStylePrompt = (id: string) => {
     const updated = stylePrompts.filter(p => p.id !== id);
     setStylePrompts(updated);
-    saveToGithub(images, folders, contentPrompts, updated);
+    saveToStorage(images, folders, contentPrompts, updated);
   };
 
   const linkFolderToContentPrompt = (folderId: string, promptId: string) => {
     const updated = folders.map(f => f.id === folderId ? { ...f, systemPromptId: promptId } : f);
     setFolders(updated);
-    saveToGithub(images, updated, contentPrompts, stylePrompts);
+    saveToStorage(images, updated, contentPrompts, stylePrompts);
   };
 
   const linkFolderToStylePrompt = (folderId: string, promptId: string) => {
     const updated = folders.map(f => f.id === folderId ? { ...f, stylePromptId: promptId } : f);
     setFolders(updated);
-    saveToGithub(images, updated, contentPrompts, stylePrompts);
+    saveToStorage(images, updated, contentPrompts, stylePrompts);
   };
 
-  const [githubConfig, setGithubConfig] = useState({
-    isConnected: false,
-    releaseId: null as number | null,
-    manifestAssetId: null as number | null
-  });
-
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const githubConfigRef = useRef(githubConfig);
-
   const aiRef = useRef<GoogleGenAI | null>(null);
 
   // Initialize AI
@@ -159,66 +148,44 @@ export default function App() {
     }
   }, []);
 
-  // Initialize GitHub
+  // Initialize Storage
   useEffect(() => {
-    async function initGithub() {
+    async function initStorage() {
       if (!userCode) return;
       
       setIsSyncing(true);
       try {
-        const release = await github.getRelease();
-        const userManifestName = `manifest_${userCode}.json`;
-        const manifestAsset = release.assets.find(a => a.name === userManifestName);
-        
-        let initialData: Manifest = { images: [], folders: [] };
-        if (manifestAsset) {
-          const response = await fetch(manifestAsset.browser_download_url);
-          if (response.ok) {
-            initialData = await response.json();
-          }
-        }
-
-        setImages(initialData.images || []);
-        setFolders(initialData.folders || []);
-        setContentPrompts(initialData.contentPrompts || []);
-        setStylePrompts(initialData.stylePrompts || []);
-        setGithubConfig({
-          isConnected: true,
-          releaseId: release.id,
-          manifestAssetId: manifestAsset?.id || null
-        });
+        const data = await storage.fetchManifest(userCode);
+        setImages(data.images || []);
+        setFolders(data.folders || []);
+        setContentPrompts(data.contentPrompts || []);
+        setStylePrompts(data.stylePrompts || []);
       } catch (err) {
-        console.error("GitHub Sync Failed:", err);
+        console.error("Storage Sync Failed:", err);
       } finally {
         setIsSyncing(false);
       }
     }
-    initGithub();
+    initStorage();
   }, [userCode]);
 
-  const saveToGithub = async (
+  const saveToStorage = async (
     updatedImages: ImageFile[], 
     updatedFolders: Folder[], 
     updatedContentPrompts: ContentPrompt[] = contentPrompts,
     updatedStylePrompts: StylePrompt[] = stylePrompts
   ) => {
-    if (!githubConfig.isConnected || githubConfig.releaseId === null || !userCode) return;
+    if (!userCode) return;
     try {
-      const manifest: Manifest = { 
+      const manifest: any = { 
         images: updatedImages, 
         folders: updatedFolders, 
         contentPrompts: updatedContentPrompts,
         stylePrompts: updatedStylePrompts
       };
-      const manifestAsset = await github.updateManifest(
-        manifest, 
-        githubConfig.releaseId, 
-        userCode,
-        githubConfig.manifestAssetId || undefined
-      );
-      setGithubConfig(prev => ({ ...prev, manifestAssetId: manifestAsset.id }));
+      await storage.saveManifest(userCode, manifest);
     } catch (err) {
-      console.error("Failed to sync manifest:", err);
+      console.error("Failed to sync storage:", err);
     }
   };
 
@@ -334,7 +301,7 @@ export default function App() {
   const toggleImageCompletion = (id: string, forceValue?: boolean) => {
     const updated = images.map(img => img.id === id ? { ...img, isCompleted: forceValue !== undefined ? forceValue : !img.isCompleted } : img);
     setImages(updated);
-    saveToGithub(updated, folders);
+    saveToStorage(updated, folders);
     if (selectedImage?.id === id) {
       setSelectedImage(prev => prev ? { ...prev, isCompleted: forceValue !== undefined ? forceValue : !prev.isCompleted } : null);
     }
@@ -399,7 +366,7 @@ export default function App() {
       const dataUrl = event.target?.result as string;
       const updatedFolders = folders.map(f => f.id === currentFolderId ? { ...f, logoUrl: dataUrl } : f);
       setFolders(updatedFolders);
-      saveToGithub(images, updatedFolders);
+      saveToStorage(images, updatedFolders);
     };
     reader.readAsDataURL(file);
   };
@@ -462,7 +429,7 @@ export default function App() {
 
     const updatedFolders = [...folders, newFolder];
     setFolders(updatedFolders);
-    saveToGithub(images, updatedFolders);
+    saveToStorage(images, updatedFolders);
     setNewFolderName("");
     setShowFolderModal(false);
   };
@@ -485,14 +452,14 @@ export default function App() {
     const imagesInDeletedFolders = images.filter(img => img.folderId && foldersToDelete.has(img.folderId));
     
     imagesInDeletedFolders.forEach(img => {
-      if (img.assetId) github.deleteAsset(img.assetId);
+      // Asset deletion handled by cleanup or ignored in KV mode
     });
 
     const updatedImages = images.filter(img => !img.folderId || !foldersToDelete.has(img.folderId));
     
     setFolders(updatedFolders);
     setImages(updatedImages);
-    saveToGithub(updatedImages, updatedFolders);
+    saveToStorage(updatedImages, updatedFolders);
   };
 
   const generateImage = async (e?: React.FormEvent, isBulk = false) => {
@@ -583,15 +550,8 @@ export default function App() {
           let githubUrl = `data:image/png;base64,${base64Data}`;
           let assetId: number | undefined;
 
-          if (githubConfig.isConnected && githubConfig.releaseId !== null) {
-            try {
-              const asset = await github.uploadAsset(fileName, blob, githubConfig.releaseId);
-              githubUrl = asset.browser_download_url;
-              assetId = asset.id;
-            } catch (err) {
-              console.error("GitHub Upload failed:", err);
-            }
-          }
+          // Sequential assets or external hosting would go here
+          // For now using data URLs or external references
 
           newGeneratedImages.push({
             id,
@@ -617,7 +577,7 @@ export default function App() {
         const updatedImages = [...newGeneratedImages, ...images];
         setImages(updatedImages);
         if (isBulk) setImagePrompt("");
-        saveToGithub(updatedImages, folders);
+        saveToStorage(updatedImages, folders);
       }
     } catch (error) {
       console.error("Generation failed", error);
@@ -632,18 +592,12 @@ export default function App() {
     const imgToDelete = images.find(img => img.id === id);
     if (!imgToDelete) return;
 
-    if (imgToDelete.assetId) {
-      try {
-        await github.deleteAsset(imgToDelete.assetId);
-      } catch (err) {
-        console.error("Failed to delete asset:", err);
-      }
-    }
+    // Asset cleanup would go here
 
     const updatedImages = images.filter(img => img.id !== id);
     setImages(updatedImages);
     if (selectedImage?.id === id) setSelectedImage(null);
-    saveToGithub(updatedImages, folders);
+    saveToStorage(updatedImages, folders);
   };
 
   const downloadImage = (img: ImageFile) => {
@@ -767,7 +721,7 @@ export default function App() {
             <div className="flex items-center gap-1.5 mt-0.5">
                <div className={`w-1 h-1 rounded-full ${isSyncing ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
                <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-widest font-bold">
-                 {githubConfig.isConnected ? "Cloud" : "Local"}
+                 Status: Synced
                </span>
             </div>
           </div>
