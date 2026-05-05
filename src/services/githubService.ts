@@ -15,17 +15,17 @@ interface GitHubRelease {
 const env = (import.meta as any).env;
 
 // --- HARDCODED CONFIGURATION ---
-const PROXY_URL = 'PLACEHOLDER_PROXY_URL'; 
-const OWNER = 'PLACEHOLDER_OWNER';         
-const REPO = 'PLACEHOLDER_REPO';           
+const PROXY_URL = 'https://clintrome.shreevathsa2k27.workers.dev'; 
+const OWNER = 'shreevathsamajibail';         
+const REPO = 'Roman-client';           
 const TAG = 'v1.0.0'; 
 // -------------------------------
 
 function getConfig() {
   return {
-    proxy: PROXY_URL.includes('PLACEHOLDER') ? env.VITE_GITHUB_PROXY_URL : PROXY_URL,
-    owner: OWNER.includes('PLACEHOLDER') ? env.VITE_GITHUB_REPO_OWNER : OWNER,
-    repo: REPO.includes('PLACEHOLDER') ? env.VITE_GITHUB_REPO_NAME : REPO,
+    proxy: PROXY_URL,
+    owner: OWNER,
+    repo: REPO,
     tag: TAG
   };
 }
@@ -81,10 +81,10 @@ export async function deleteAsset(assetId: number) {
   return true;
 }
 
-export async function updateManifest(manifest: any, releaseId: number, existingManifestId?: number) {
+export async function updateManifest(manifest: any, releaseId: number, userCode: string, existingManifestId?: number) {
   if (existingManifestId) {
     await deleteAsset(existingManifestId);
   }
   const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
-  return uploadAsset('manifest.json', blob, releaseId);
+  return uploadAsset(`manifest_${userCode}.json`, blob, releaseId);
 }

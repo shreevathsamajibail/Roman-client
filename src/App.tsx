@@ -35,6 +35,23 @@ import * as github from './services/githubService';
 import { Folder, ImageFile, Manifest, ContentPrompt, StylePrompt } from './types';
 
 export default function App() {
+  const [userCode, setUserCode] = useState<string | null>(localStorage.getItem('aether_user_code'));
+  const [loginInput, setLoginInput] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handleLogin = () => {
+    if (loginInput.length === 4) {
+      localStorage.setItem('aether_user_code', loginInput);
+      setUserCode(loginInput);
+      window.location.reload(); // Refresh to trigger fresh data fetch with new code
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('aether_user_code');
+    window.location.reload();
+  };
+
   const [folders, setFolders] = useState<Folder[]>([]);
   const [images, setImages] = useState<ImageFile[]>([]);
   const [contentPrompts, setContentPrompts] = useState<ContentPrompt[]>([]);
@@ -145,20 +162,13 @@ export default function App() {
   // Initialize GitHub
   useEffect(() => {
     async function initGithub() {
-      const env = (import.meta as any).env;
-      const owner = env.VITE_GITHUB_REPO_OWNER;
-      const repo = env.VITE_GITHUB_REPO_NAME;
-      const proxy = env.VITE_GITHUB_PROXY_URL;
-
-      if (!owner || !repo || !proxy) {
-        console.warn("GitHub configuration missing in .env");
-        return;
-      }
+      if (!userCode) return;
       
       setIsSyncing(true);
       try {
         const release = await github.getRelease();
-        const manifestAsset = release.assets.find(a => a.name === 'manifest.json');
+        const userManifestName = `manifest_${userCode}.json`;
+        const manifestAsset = release.assets.find(a => a.name === userManifestName);
         
         let initialData: Manifest = { images: [], folders: [] };
         if (manifestAsset) {
@@ -184,7 +194,7 @@ export default function App() {
       }
     }
     initGithub();
-  }, []);
+  }, [userCode]);
 
   const saveToGithub = async (
     updatedImages: ImageFile[], 
@@ -192,7 +202,7 @@ export default function App() {
     updatedContentPrompts: ContentPrompt[] = contentPrompts,
     updatedStylePrompts: StylePrompt[] = stylePrompts
   ) => {
-    if (!githubConfig.isConnected || githubConfig.releaseId === null) return;
+    if (!githubConfig.isConnected || githubConfig.releaseId === null || !userCode) return;
     try {
       const manifest: Manifest = { 
         images: updatedImages, 
@@ -203,6 +213,7 @@ export default function App() {
       const manifestAsset = await github.updateManifest(
         manifest, 
         githubConfig.releaseId, 
+        userCode,
         githubConfig.manifestAssetId || undefined
       );
       setGithubConfig(prev => ({ ...prev, manifestAssetId: manifestAsset.id }));
@@ -683,7 +694,64 @@ export default function App() {
 
   return (
     <div className="h-[100svh] w-full flex flex-col font-sans bg-[#030303] text-zinc-300 relative overflow-hidden">
-      <div className="atmosphere" />
+      {!userCode ? (
+        <div className="absolute inset-0 z-[1000] bg-[#030303] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.03)_0%,transparent_100%)]">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm glass-card border-white/5 p-10 space-y-10 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
+            
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-emerald-500/5 border border-emerald-500/20 rounded-3xl mx-auto flex items-center justify-center mb-6 relative group">
+                <div className="absolute inset-0 bg-emerald-500/10 blur-xl rounded-full scale-0 group-hover:scale-150 transition-transform duration-700" />
+                <Maximize2 size={32} className="text-emerald-500 animate-[spin_10s_linear_infinite]" />
+              </div>
+              <h2 className="text-3xl font-bold tracking-tighter text-white uppercase italic">Aether Core</h2>
+              <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-[0.3em] font-black">Neural Access Protocol</p>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center px-1">
+                   <label className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest font-black italic">Identity Token</label>
+                   <span className="text-[8px] font-mono text-emerald-500/50 uppercase">4-Digit Numeric</span>
+                </div>
+                <div className="relative group">
+                  <input 
+                    type="password"
+                    maxLength={4}
+                    placeholder="0000"
+                    value={loginInput}
+                    onChange={(e) => setLoginInput(e.target.value.replace(/\D/g, ''))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                    className="w-full h-16 bg-white/[0.02] border border-white/5 rounded-2xl text-center text-3xl font-mono tracking-[0.8em] text-white focus:border-emerald-500/40 focus:bg-white/[0.04] transition-all outline-none"
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleLogin}
+                disabled={loginInput.length !== 4}
+                className={`w-full h-16 rounded-2xl font-mono font-bold uppercase tracking-[0.3em] transition-all relative overflow-hidden group ${loginInput.length === 4 ? 'bg-white text-black hover:bg-zinc-200' : 'bg-white/5 text-zinc-800 cursor-not-allowed'}`}
+              >
+                {loginInput.length === 4 ? (
+                  <span className="relative z-10">Initialize Access</span>
+                ) : 'Awaiting Input'}
+              </button>
+
+              <div className="pt-6 border-t border-white/5 text-center">
+                 <p className="text-[7px] font-mono text-zinc-700 uppercase leading-relaxed tracking-widest italic">
+                   Enter token to resume synchronization. NEW USERS can create a unique code to launch a private sector.
+                 </p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      ) : (
+        <>
+          <div className="atmosphere" />
 
       {/* Responsive Header */}
       <header className="flex-none z-50 flex items-center justify-between px-5 py-3 border-b border-white/5 bg-black/20 backdrop-blur-3xl">
@@ -706,6 +774,15 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4">
+            <div className="hidden sm:flex flex-col items-end gap-0.5">
+               <span className="text-[7px] font-mono text-zinc-600 uppercase tracking-widest">Operator Status</span>
+               <div className="flex items-center gap-1.5">
+                 <span className="text-[9px] font-mono text-emerald-500 font-bold italic">#{userCode}</span>
+                 <button onClick={handleLogout} className="text-zinc-700 hover:text-red-500 transition-colors">
+                   <X size={10} />
+                 </button>
+               </div>
+            </div>
            {currentFolderId && (
              <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-white/5 rounded-lg border border-white/5">
                 <FolderOpen size={12} className="text-zinc-500" />
@@ -891,29 +968,27 @@ export default function App() {
                               <img 
                                 src={img.url} 
                                 alt={img.prompt} 
-                                className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${img.isCompleted ? 'opacity-30 grayscale' : ''}`} 
+                                className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-105 ${img.isCompleted ? 'opacity-20 grayscale' : ''}`} 
                                 referrerPolicy="no-referrer"
                               />
                               
-                              {/* Completion Tick Indicator */}
+                              {/* Direct Tick Toggle on Thumbnail */}
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleImageCompletion(img.id);
+                                }}
+                                className={`absolute top-2 right-2 z-30 w-8 h-8 rounded-full flex items-center justify-center transition-all ${img.isCompleted ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'bg-black/40 text-white/20 hover:text-white hover:bg-black/60 opacity-0 group-hover:opacity-100'}`}
+                              >
+                                <Check size={14} className={img.isCompleted ? "font-black" : ""} />
+                              </button>
+
+                              {/* Subtle Archived Label */}
                               {img.isCompleted && (
-                                <div className="absolute top-2 left-2 z-10 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.5)]">
-                                  <Check size={12} className="text-black font-extrabold" />
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                  <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-[0.5em] font-black border border-white/5 px-3 py-1 rounded bg-black/40 backdrop-blur-sm">Archived</span>
                                 </div>
                               )}
-
-                              {/* Hover Metadata Overlay */}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
-                                 <p className="text-[9px] text-zinc-300 line-clamp-2 leading-relaxed font-light italic mb-3">
-                                   {img.fbDescription || img.prompt}
-                                 </p>
-                                 <div className="flex items-center justify-between border-t border-white/10 pt-3">
-                                    <span className="text-[7px] font-mono text-zinc-500 uppercase tracking-[0.3em] font-black">
-                                      {img.isCompleted ? 'ARCHIVED' : 'ACTIVE UNIT'}
-                                    </span>
-                                    <Maximize2 size={12} className="text-zinc-600" />
-                                 </div>
-                              </div>
                             </motion.div>
                           ))}
                         </div>
@@ -1194,7 +1269,7 @@ export default function App() {
                            <button onClick={() => deleteImage(selectedImage.id)} className="text-zinc-700 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                         </div>
                       </div>
-                      <p className="text-base sm:text-lg text-zinc-400 leading-relaxed font-light first-letter:text-emerald-500 first-letter:text-3xl first-letter:font-bold first-letter:mr-1">
+                      <p className="text-sm sm:text-base text-zinc-400 leading-relaxed font-light">
                         {selectedImage.fbDescription || "Processing metadata stream..."}
                       </p>
                       <div className="pt-4 flex items-center justify-between border-t border-white/5 opacity-20">
@@ -1399,6 +1474,8 @@ export default function App() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         [data-hidden] { display: none; }
       `}} />
+        </>
+      )}
     </div>
   );
 }
